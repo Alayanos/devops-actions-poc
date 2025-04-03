@@ -1,37 +1,49 @@
+# Reusable workflow to run Go unit tests and validate JSON/YAML files
+
 name: reusable-go-json-test
 
 on:
   workflow_call:
     inputs:
+      # Go version to use for testing
       go-version:
         required: false
         type: string
         default: '1.23'
+      # Optional exclude file path for JSON/YAML validation
       exclude-file:
         required: false
         type: string
         default: 'yaml_json_lint_exclude.txt'
-        
+
 jobs:
   test:
     name: Run Go Unit Tests
     runs-on: ubuntu-latest
+
     steps:
+      # Set up Go with specified version
       - uses: actions/setup-go@v5
         with:
           go-version: ${{ inputs.go-version }}
           check-latest: false
-          
+
+      # Checkout repository code
       - uses: actions/checkout@v4
-      
+
+      # Run Go tests with verbose output
       - name: Run Tests
         run: go test -v ./...
-        
-  json-yaml-validate: 
+
+  json-yaml-validate:
     name: Validate JSON/YAML
     runs-on: ubuntu-latest
+
     steps:
+      # Checkout repository code
       - uses: actions/checkout@v4
+
+      # Validate all .json/.yaml files, skipping any listed in exclude_file
       - name: Run YAML/JSON Validation
         uses: GrantBirki/json-yaml-validate@v3.2.1
         with:
