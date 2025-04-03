@@ -1,0 +1,163 @@
+name: reusable-release
+
+on:
+  workflow_call:
+    inputs:
+      service_name:
+        required: true
+        type: string
+      service_title:
+        required: true
+        type: string
+    secrets:
+      GOOGLE_CREDENTIALS_AUTH:
+        required: true
+      SLACK_WEBHOOK:
+        required: true
+
+jobs:
+  git:
+    name: Git Operations & Version Bump
+    runs-on: ubuntu-latest
+    outputs:
+      output1: ${{ steps.git_job_status.outputs.git_status }}
+      output2: ${{ steps.git_job_status.outputs.deployed_version }}
+    env:
+      SERVICE_NAME: ${{ inputs.service_name }}
+      SERVICE_TITLE: ${{ inputs.service_title }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: fregante/setup-git-user@v2
+
+      - name: Get the version from tag
+        id: get_new_version
+        run: echo "new_version=$(echo $GITHUB_REF | cut -d / -f 3)" >> $GITHUB_OUTPUT
+
+      - name: Git - Pull devel
+        run: |
+          git config user.name "GitHub Actions Bot"
+          git config user.email "${{ github.actor }}@users.noreply.github.com"
+          git fetch --unshallow
+          git checkout devel
+          git pull --rebase
+
+      - name: Update Makefile
+        run: |
+          version=${{ steps.get_new_version.outputs.new_version }}
+          sed -i -e "1 s/VERSION := .*/${version}/; t" -e "1,// s//VERSION := ${version}/" ${GITHUB_WORKSPACE}/Makefile
+
+      - name: Update values.yaml (image.tag)
+        uses: fjogeleit/yaml-update-action@v0.16.0
+        with:
+          valueFile: 'chart/values.yaml'
+          propertyPath: 'image.tag'
+          value: ${{ steps.get_new_version.outputs.new_version }}
+          commitChange: false
+
+      - name: Update Chart.yaml (appVersion)
+        uses: fjogeleit/yaml-update-action@v0.16.0
+        with:
+          valueFile: 'chart/Chart.yaml'
+          propertyPath: 'appVersion'
+          value: ${{ steps.get_new_version.outputs.new_version }}
+          commitChange: false
+
+      - name: Update Chart.yaml (version)
+        uses: fjogeleit/yaml-update-action@v0.16.0
+        with:
+          valueFile: 'chart/Chart.yaml'
+          propertyPath: 'version'
+          value: ${{ steps.get_new_version.outputs.new_version }}
+          commitChange: false
+
+      - name: Git Commit and Push
+        run: |
+          git add .
+          git commit -m "VERSION: ${{ steps.get_new_version.outputs.new_version }}"
+          git push
+
+      - name: Merge devel into main
+        run: |
+          git checkout main
+          git pull --rebase
+          git merge devel --ff-only
+          git push
+
+      - name: Set Git Status
+        id: git_job_status
+        run: |
+          echo "git_status=success" >> $GITHUB_OUTPUT
+          echo "deployed_version=$(echo $GITHUB_REF | cut -d / -f 3)" >> $GITHUB_OUTPUT
+
+  build:
+    needs: git
+    name: Docker Build and Push
+    runs-on: ubuntu-latest
+    environment: production
+    outputs:
+      output1: ${{ steps.build_job_status.outputs.build_status }}
+    env:
+      SERVICE_NAME: ${{ inputs.service_name }}
+      SERVICE_TITLE: ${{ inputs.service_title }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Get version from tag
+        id: get_new_version
+        run: echo "new_version=$(echo $GITHUB_REF | cut -d / -f 3)" >> $GITHUB_OUTPUT
+
+      - name: Docker Build
+        run: |
+          docker build -t eu.gcr.io/atv-cloud-dev/services/${{ env.SERVICE_NAME }}:${{ steps.get_new_version.outputs.new_version }} .
+
+      - name: Authenticate to Google Cloud
+        id: auth
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: "${{ secrets.GOOGLE_CREDENTIALS_AUTH }}"
+
+      - name: Configure Docker for GCR
+        run: gcloud auth configure-docker --quiet
+
+      - name: Docker Push
+        run: |
+          docker push eu.gcr.io/atv-cloud-dev/services/${{ env.SERVICE_NAME }}:${{ steps.get_new_version.outputs.new_version }}
+
+      - name: Set Build Status
+        id: build_job_status
+        run: echo "build_status=success" >> $GITHUB_OUTPUT
+
+  slack:
+    needs: [git, build]
+    if: always()
+    name: Slack Notification
+    runs-on: ubuntu-latest
+    env:
+      SERVICE_NAME: ${{ inputs.service_name }}
+      SERVICE_TITLE: ${{ inputs.service_title }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Notify Slack on Failure
+        if: ${{ needs.git.outputs.output1 != 'success' || needs.build.outputs.output1 != 'success' }}
+        uses: rtCamp/action-slack-notify@v2
+        env:
+          SLACK_CHANNEL: github-actions
+          SLACK_COLOR: "#FF0000"
+          SLACK_TITLE: "FAILED - ${{ env.SERVICE_TITLE }}"
+          SLACK_MESSAGE: "RELEASE FAILED / ${{ env.SERVICE_NAME }}"
+          SLACK_WEBHOOK: ${{ secrets.SLACK_WEBHOOK }}
+
+      - name: Notify Slack on Success
+        if: ${{ needs.git.outputs.output1 == 'success' && needs.build.outputs.output1 == 'success' }}
+        uses: rtCamp/action-slack-notify@v2
+        env:
+          SLACK_CHANNEL: github-actions
+          SLACK_COLOR: "good"
+          SLACK_TITLE: "${{ env.SERVICE_TITLE }} release -> ${{ env.SERVICE_NAME }}:${{ needs.git.outputs.output2 }}"
+          SLACK_MESSAGE: "${{ env.SERVICE_NAME }} was released through GitHub Actions"
+          SLACK_WEBHOOK: ${{ secrets.SLACK_WEBHOOK }}
