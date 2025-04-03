@@ -1,32 +1,45 @@
+# Reusable workflow to run Trivy vulnerability scanner
+# Supports scanning filesystem, images, or repositories with custom config
+
 name: trivy-reusable
 
 on:
   workflow_call:
     inputs:
+      # Type of scan to perform: fs (filesystem), image, or repo
       scan-type:
         required: false
         type: string
         default: fs
+
+      # Target to scan: a directory, image, or URL depending on scan-type
       scan-ref:
         required: false
         type: string
         default: .
+
+      # Scanner type: vuln (vulnerabilities), secret, config
       scanners:
         required: false
         type: string
         default: vuln
+
+      # Exit code returned by Trivy when vulnerabilities are found (default: 1)
       exit-code:
         required: false
         type: string
         default: '1'
-        
+
 jobs:
   trivy:
     name: Run Trivy Scan
     runs-on: ubuntu-latest
+
     steps:
+      # Checkout the project code so Trivy can scan it
       - uses: actions/checkout@v4
 
+      # Run Trivy scanner with parameters passed by the calling workflow
       - name: Run Trivy vulnerability scanner
         uses: aquasecurity/trivy-action@0.30.0
         with:
