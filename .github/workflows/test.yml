@@ -1,0 +1,39 @@
+name: reusable-go-json-test
+
+on:
+  workflow_call:
+    inputs:
+      go-version:
+        required: false
+        type: string
+        default: '1.23'
+      exclude-file:
+        required: false
+        type: string
+        default: 'yaml_json_lint_exclude.txt'
+        
+jobs:
+  test:
+    name: Run Go Unit Tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/setup-go@v5
+        with:
+          go-version: ${{ inputs.go-version }}
+          check-latest: false
+          
+      - uses: actions/checkout@v4
+      
+      - name: Run Tests
+        run: go test -v ./...
+        
+  json-yaml-validate: 
+    name: Validate JSON/YAML
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run YAML/JSON Validation
+        uses: GrantBirki/json-yaml-validate@v3.2.1
+        with:
+          comment: "true"
+          exclude_file: ${{ inputs.exclude-file }}
