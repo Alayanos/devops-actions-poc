@@ -1,21 +1,30 @@
+# Reusable GitHub Actions workflow for service release
 name: reusable-release
 
 on:
   workflow_call:
     inputs:
+      # Name of the service to be tagged and built
       service_name:
         required: true
         type: string
+
+      # Title of the service used in Slack notifications
       service_title:
         required: true
         type: string
+
     secrets:
+      # GCP credentials for Docker image push
       GOOGLE_CREDENTIALS_AUTH:
         required: true
+
+      # Slack Webhook URL for alerts
       SLACK_WEBHOOK:
         required: true
 
 jobs:
+  # First job handles version bumping, file updates, and merging
   git:
     name: Git Operations & Version Bump
     runs-on: ubuntu-latest
@@ -27,14 +36,18 @@ jobs:
       SERVICE_TITLE: ${{ inputs.service_title }}
 
     steps:
+      # Checkout the repository
       - uses: actions/checkout@v4
 
+      # Set up Git user identity
       - uses: fregante/setup-git-user@v2
 
+      # Extract tag version to use as Docker/image version
       - name: Get the version from tag
         id: get_new_version
         run: echo "new_version=$(echo $GITHUB_REF | cut -d / -f 3)" >> $GITHUB_OUTPUT
 
+      # Switch to devel, pull latest changes
       - name: Git - Pull devel
         run: |
           git config user.name "GitHub Actions Bot"
@@ -43,11 +56,13 @@ jobs:
           git checkout devel
           git pull --rebase
 
+      # Replace version line in Makefile
       - name: Update Makefile
         run: |
           version=${{ steps.get_new_version.outputs.new_version }}
           sed -i -e "1 s/VERSION := .*/${version}/; t" -e "1,// s//VERSION := ${version}/" ${GITHUB_WORKSPACE}/Makefile
 
+      # Update image tag in Helm values
       - name: Update values.yaml (image.tag)
         uses: fjogeleit/yaml-update-action@v0.16.0
         with:
@@ -56,6 +71,7 @@ jobs:
           value: ${{ steps.get_new_version.outputs.new_version }}
           commitChange: false
 
+      # Set appVersion field in Chart.yaml
       - name: Update Chart.yaml (appVersion)
         uses: fjogeleit/yaml-update-action@v0.16.0
         with:
@@ -64,6 +80,7 @@ jobs:
           value: ${{ steps.get_new_version.outputs.new_version }}
           commitChange: false
 
+      # Set chart version field in Chart.yaml
       - name: Update Chart.yaml (version)
         uses: fjogeleit/yaml-update-action@v0.16.0
         with:
@@ -72,12 +89,14 @@ jobs:
           value: ${{ steps.get_new_version.outputs.new_version }}
           commitChange: false
 
+      # Commit and push updated files
       - name: Git Commit and Push
         run: |
           git add .
           git commit -m "VERSION: ${{ steps.get_new_version.outputs.new_version }}"
           git push
 
+      # Merge devel into main branch
       - name: Merge devel into main
         run: |
           git checkout main
@@ -85,12 +104,14 @@ jobs:
           git merge devel --ff-only
           git push
 
+      # Store job status for downstream use
       - name: Set Git Status
         id: git_job_status
         run: |
           echo "git_status=success" >> $GITHUB_OUTPUT
           echo "deployed_version=$(echo $GITHUB_REF | cut -d / -f 3)" >> $GITHUB_OUTPUT
 
+  # Second job builds Docker image and pushes it
   build:
     needs: git
     name: Docker Build and Push
@@ -103,33 +124,41 @@ jobs:
       SERVICE_TITLE: ${{ inputs.service_title }}
 
     steps:
+      # Checkout repo for Dockerfile context
       - uses: actions/checkout@v4
 
+      # Extract tag version again
       - name: Get version from tag
         id: get_new_version
         run: echo "new_version=$(echo $GITHUB_REF | cut -d / -f 3)" >> $GITHUB_OUTPUT
 
+      # Build Docker image
       - name: Docker Build
         run: |
           docker build -t eu.gcr.io/atv-cloud-dev/services/${{ env.SERVICE_NAME }}:${{ steps.get_new_version.outputs.new_version }} .
 
+      # Authenticate to GCP using provided secret
       - name: Authenticate to Google Cloud
         id: auth
         uses: google-github-actions/auth@v2
         with:
           credentials_json: "${{ secrets.GOOGLE_CREDENTIALS_AUTH }}"
 
+      # Allow Docker to push to GCR
       - name: Configure Docker for GCR
         run: gcloud auth configure-docker --quiet
 
+      # Push Docker image to GCR
       - name: Docker Push
         run: |
           docker push eu.gcr.io/atv-cloud-dev/services/${{ env.SERVICE_NAME }}:${{ steps.get_new_version.outputs.new_version }}
 
+      # Save build status for Slack alerting
       - name: Set Build Status
         id: build_job_status
         run: echo "build_status=success" >> $GITHUB_OUTPUT
 
+  # Final job sends Slack alert
   slack:
     needs: [git, build]
     if: always()
@@ -140,8 +169,10 @@ jobs:
       SERVICE_TITLE: ${{ inputs.service_title }}
 
     steps:
+      # Optional: checkout (for message context)
       - uses: actions/checkout@v4
 
+      # Failure message if git or build failed
       - name: Notify Slack on Failure
         if: ${{ needs.git.outputs.output1 != 'success' || needs.build.outputs.output1 != 'success' }}
         uses: rtCamp/action-slack-notify@v2
@@ -152,6 +183,7 @@ jobs:
           SLACK_MESSAGE: "RELEASE FAILED / ${{ env.SERVICE_NAME }}"
           SLACK_WEBHOOK: ${{ secrets.SLACK_WEBHOOK }}
 
+      # Success message if both git and build succeeded
       - name: Notify Slack on Success
         if: ${{ needs.git.outputs.output1 == 'success' && needs.build.outputs.output1 == 'success' }}
         uses: rtCamp/action-slack-notify@v2
