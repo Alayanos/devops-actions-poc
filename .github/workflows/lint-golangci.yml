@@ -18,11 +18,11 @@ jobs:
     steps:
       - uses: actions/setup-go@v5
         with:
-          go-version: $({ inputs.go-version })
+          go-version: ${{ inputs.go-version }}
           check-latest: false
       - uses: actions/checkout@v4
       - name: Run golangci-lint
         uses: golangci/golangci-lint-action@v7
         with:
-          version: $({ inputs.lint-version })
+          version: ${{ inputs.lint-version }}
           args: --timeout=10m
