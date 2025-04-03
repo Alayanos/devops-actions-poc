@@ -1,24 +1,32 @@
+# Reusable workflow for running Go tests
+# Can be called from other repositories using 'workflow_call'
+
 name: go-test-reusable
 
 on:
   workflow_call:
     inputs:
+      # Go version to be used during testing
       go-version:
         required: false
         type: string
         default: '1.23'
-        
+
 jobs:
   test:
     name: Run Go Tests
     runs-on: ubuntu-latest
+
     steps:
+      # Setup the specified version of Go
       - uses: actions/setup-go@v5
         with:
           go-version: ${{ inputs.go-version }}
           check-latest: false
-          
+
+      # Checkout the project code
       - uses: actions/checkout@v4
-      
+
+      # Run all Go tests recursively with verbose output
       - name: Run tests
         run: go test ./...
