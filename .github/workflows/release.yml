@@ -97,11 +97,12 @@ jobs:
           git push
 
       # Merge devel into main branch
+       # git merge devel --ff-only
       - name: Merge devel into main
         run: |
           git checkout main
           git pull --rebase
-          git merge devel --ff-only
+          git merge devel --no-ff
           git push
 
       # Store job status for downstream use
