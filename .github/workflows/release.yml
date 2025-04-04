@@ -90,10 +90,11 @@ jobs:
           commitChange: false
 
       # Commit and push updated files
+      # git commit -m "VERSION: ${{ steps.get_new_version.outputs.new_version }}"
       - name: Git Commit and Push
         run: |
           git add .
-          git commit -m "VERSION: ${{ steps.get_new_version.outputs.new_version }}"
+          git diff --cached --quiet || git commit -m "VERSION: ${{ steps.get_new_version.outputs.new_version }}"
           git push
 
       # Merge devel into main branch
