@@ -32,8 +32,18 @@ jobs:
       # Checkout the repository code
       - uses: actions/checkout@v4
 
+      # Ensure .golangci.yml exists (fallback to central config if missing)
+      - name: Use Centralized .golangci.yml if not found
+        run: |
+          if [ ! -f .golangci.yml ]; then
+            echo "Central config not found, downloading from central repo..."
+            curl -sSL https://raw.githubusercontent.com/Alayanos/devops-actions-poc/main/.golangci.yml -o .golangci.yml
+          else
+            echo "Using repo-specific .golangci.yml"
+          fi
+
       # Run golangci-lint with optional timeout
-      - name: Run golangci-lint
+      - name: run golangci-lint
         uses: golangci/golangci-lint-action@v7
         with:
           version: ${{ inputs.lint-version }}
