@@ -86,6 +86,42 @@ jobs:
 
 ---
 
+### 5. 🧹 .golangci.yml Linting Configuration
+Purpose: Provide a standardized and strict linting policy across all Go services using golangci-lint.
+
+The configuration file .golangci.yml is located in the root of this repository and is used automatically by the lint-golangci.yml reusable workflow.
+
+Linters Enabled:
+Includes over 25 linters such as gosec, revive, cyclop, errcheck, wrapcheck, and more.
+
+Custom Settings:
+Tweaked thresholds for complexity, duplication, and formatting standards.
+
+Safe Defaults:
+Excludes third-party, examples, and generated code to reduce false positives.
+
+🔧 Usage
+In the consuming repository (e.g. devops-actions-test), you only need to call the centralized lint workflow:
+
+yaml
+Copy
+Edit
+# .github/workflows/lint.yml
+name: Use Central Lint
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  lint:
+    uses: your-org/devops-actions-poc/.github/workflows/lint-golangci.yml@main
+No additional setup is needed if the root .golangci.yml is used from this repo.
+```
+
+---
+
 ## 🌲 Branching & Release Flow
 
 ```text
