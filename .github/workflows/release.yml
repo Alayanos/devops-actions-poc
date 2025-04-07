@@ -135,14 +135,11 @@ jobs:
         run: echo "new_version=$(echo $GITHUB_REF | cut -d / -f 3)" >> $GITHUB_OUTPUT
 
       # Build Docker image
-      #- name: Docker Build
-       # run: |
-        #  docker build -t eu.gcr.io/atv-cloud-dev/services/${{ env.SERVICE_NAME }}:${{ steps.get_new_version.outputs.new_version }} .
       - name: Docker Build
-        #run: |
-          # docker build -t gcr.io/lokalee-testing/devops-actions-test:${{ steps.tag.outputs.version }} .
         run: |
-           docker build -t gcr.io/lokalee-testing/devops-actions-test:test .
+          docker build -t eu.gcr.io/atv-cloud-dev/services/${{ env.SERVICE_NAME }}:${{ steps.get_new_version.outputs.new_version }} .
+      
+
 
 
       # Authenticate to GCP using provided secret
@@ -157,14 +154,9 @@ jobs:
         run: gcloud auth configure-docker --quiet
 
       # Push Docker image to GCR
-      # - name: Docker Push
-      #  run: |
-      #   docker push eu.gcr.io/atv-cloud-dev/services/${{ env.SERVICE_NAME }}:${{ steps.get_new_version.outputs.new_version }}
-
-       
       - name: Docker Push
         run: |
-          docker push gcr.io/lokalee-testing/devops-actions-test:test
+         docker push eu.gcr.io/atv-cloud-dev/services/${{ env.SERVICE_NAME }}:${{ steps.get_new_version.outputs.new_version }}
 
 
       # Save build status for Slack alerting
