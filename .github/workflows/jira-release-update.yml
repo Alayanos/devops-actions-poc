@@ -1,0 +1,36 @@
+name: Jira Release Update
+
+on:
+  workflow_call:
+    inputs:
+      version:
+        required: true
+        type: string
+    secrets:
+      JIRA_EMAIL:
+        required: true
+      JIRA_TOKEN:
+        required: true
+      JIRA_BASE_URL:
+        required: true
+      JIRA_PROJECT_KEY:
+        required: true
+
+jobs:
+  update-release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Create/Update Jira Release
+        run: |
+          version="${{ inputs.version }}"
+          release_date=$(date +"%Y-%m-%d")
+
+          curl -X POST "${{ secrets.JIRA_BASE_URL }}/rest/api/3/version" \
+            --user "${{ secrets.JIRA_EMAIL }}:${{ secrets.JIRA_TOKEN }}" \
+            --header 'Content-Type: application/json' \
+            --data "{
+              \"name\": \"${version}\",
+              \"project\": \"${{ secrets.JIRA_PROJECT_KEY }}\",
+              \"releaseDate\": \"${release_date}\",
+              \"released\": true
+            }"
